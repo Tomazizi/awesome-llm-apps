@@ -1,0 +1,24 @@
+services:
+  app:
+    image: python:3.12-slim
+    working_dir: /app/starter_ai_agents/ai_travel_agent
+    volumes:
+      - ./:/app
+    ports:
+      - "3000:3000"
+    environment:
+      - BASE44_PREVIEW_MODE
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PIP_NO_CACHE_DIR=1
+    command:
+      [
+        "sh", "-ec",
+        "pip install -r requirements.txt && exec streamlit run travel_agent.py --server.port 3000 --server.address 0.0.0.0 --server.headless true --server.fileWatcherType poll --browser.gatherUsageStats false $([ \"$BASE44_PREVIEW_MODE\" = \"1\" ] && echo --server.enableCORS=false --server.enableXsrfProtection=false)"
+      ]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/_stcore/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
