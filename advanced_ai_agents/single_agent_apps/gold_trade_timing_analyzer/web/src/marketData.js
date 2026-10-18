@@ -51,18 +51,6 @@ async function get(url, { timeout = 20000, as = 'text' } = {}) {
   }
 }
 
-async function getAny(urls, opts) {
-  let lastErr;
-  for (const u of urls) {
-    try {
-      return { data: await get(u, opts), url: u };
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('all sources failed');
-}
-
 const yahooUrl = (symbol, interval) =>
   `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${TF_YAHOO[interval] || '60m'}&range=${TF_RANGE[interval] || '730d'}&includePrePost=false`;
 
