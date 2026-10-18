@@ -252,9 +252,17 @@ def construct_trade(
     atr_value: float,
 ) -> Optional[Trade]:
     """Structure-based stop, Fibonacci extension targets, fractional sizing."""
-    if i >= len(df) - 1:
-        return None
-    entry_ref = float(df["open"].iloc[i + 1])       # never enter on the signal close
+    # Historical bars enter at the NEXT bar's open - entering on the signal bar's
+    # own close is the classic backtest lie. On the live bar there is no next bar,
+    # so the reference is the current close (a market order, right now).
+    if i + 1 < len(df):
+        entry_ref = float(df["open"].iloc[i + 1])
+        entry_ts = df.index[i + 1]
+        entry_idx = i + 1
+    else:
+        entry_ref = float(df["close"].iloc[i])
+        entry_ts = df.index[i]
+        entry_idx = i
     a = atr_value if atr_value and np.isfinite(atr_value) and atr_value > 0 else 1e-6
     notes: List[str] = []
 
@@ -322,7 +330,7 @@ def construct_trade(
     }
 
     return Trade(
-        ts=df.index[i + 1], idx=i + 1, direction=direction,
+        ts=entry_ts, idx=entry_idx, direction=direction,
         entry=float(entry_ref), stop=float(stop), tp1=float(tp1), tp2=float(tp2),
         tp3=float(tp3), score=float(score), tier=tier_of(score, p),
         risk_atr=risk / a, rr=rr, size=float(size), risk_usd=float(risk_usd),
@@ -362,13 +370,15 @@ def current_signal(
         gates.append(("Structural trigger (tCISD)", True, f"{tcisd_v:.0f}/100, {int(panel['tcisd_bars_since'].iloc[i])} bars old"))
 
     rev = float(panel["reversal_risk"].iloc[i])
-    gates.append(("Reversal risk < 0.75", rev < 0.75, f"{rev:.0%}"))
+    base_rate = float((bundle.get("rev") or {}).get("base_rate", 0.35))
+    gates.append((f"Reversal risk < {p.rev_gate:.0%}", rev < p.rev_gate,
+                f"{rev:.0%} (base rate {base_rate:.0%})"))
     gates.append((f"Conviction >= {p.min_conviction}", score >= p.min_conviction, f"{score:.0f}/100"))
     rr_ok = True
 
     trade = None
     atr_v = float(panel["atr"].iloc[i])
-    if tcisd_v > 0 and rev < 0.75:
+    if tcisd_v > 0 and rev < p.rev_gate:
         trade = construct_trade(df, i, direction, score, panel, bundle["legs"], p, atr_v)
         if trade is not None:
             rr_ok = trade.rr >= p.min_rr

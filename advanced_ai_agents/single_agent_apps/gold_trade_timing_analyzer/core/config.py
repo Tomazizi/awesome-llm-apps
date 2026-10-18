@@ -151,6 +151,7 @@ class Params:
     rev_refit_every: int = 60         # refit cadence (walk-forward)
     rev_l2: float = 1e-2
     rev_stretch_window: int = 250
+    rev_gate: float = 0.75           # signal is vetoed above this reversal probability
 
     # ---- signals -----------------------------------------------------------
     min_conviction: int = 55          # below this: no trade

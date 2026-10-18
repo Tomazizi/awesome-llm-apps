@@ -21,6 +21,7 @@ The LLM never overrides the engine. It contributes one weighted component
 """
 from __future__ import annotations
 
+import math
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -152,9 +153,6 @@ def score_headline(text: str) -> float:
     if hits == 0:
         return 0.0
     return float(np.tanh(s / (2.0 * math.sqrt(hits))))
-
-
-import math  # noqa: E402  (kept local to the scoring helper above)
 
 
 def classify_news(df: pd.DataFrame) -> pd.DataFrame:

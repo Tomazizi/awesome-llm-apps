@@ -69,7 +69,7 @@ def generate_signals(
         sfx = "long" if direction > 0 else "short"
         if float(panel[f"tcisd_{sfx}"].iloc[i]) <= 0:
             continue
-        if float(panel["reversal_risk"].iloc[i]) >= 0.75:
+        if float(panel["reversal_risk"].iloc[i]) >= p.rev_gate:
             continue
         atr_v = float(panel["atr"].iloc[i])
         tr = construct_trade(df, i, direction, score, panel, bundle["legs"], p, atr_v)
@@ -109,7 +109,7 @@ def gate_funnel(df: pd.DataFrame, bundle: Dict[str, object], p: Params,
     n = len(df)
     counts = {"Bars in sample": max(0, n - p.bt_warmup),
               "CISD trigger present": 0,
-              "+ reversal risk < 75%": 0,
+              f"+ reversal risk < {p.rev_gate:.0%}": 0,
               f"+ conviction >= {min_score:.0f}": 0,
               "+ trade constructible": 0,
               f"+ R:R >= {p.min_rr}": 0}
@@ -126,9 +126,9 @@ def gate_funnel(df: pd.DataFrame, bundle: Dict[str, object], p: Params,
         if float(panel[f"tcisd_{sfx}"].iloc[i]) <= 0:
             continue
         counts["CISD trigger present"] += 1
-        if float(panel["reversal_risk"].iloc[i]) >= 0.75:
+        if float(panel["reversal_risk"].iloc[i]) >= p.rev_gate:
             continue
-        counts["+ reversal risk < 75%"] += 1
+        counts[f"+ reversal risk < {p.rev_gate:.0%}"] += 1
         if score < min_score:
             continue
         counts[f"+ conviction >= {min_score:.0f}"] += 1

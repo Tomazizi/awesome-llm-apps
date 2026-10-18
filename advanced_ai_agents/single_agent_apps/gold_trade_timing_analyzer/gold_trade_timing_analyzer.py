@@ -209,6 +209,7 @@ def sidebar() -> dict:
         p.ssmt_z_div_threshold = st.slider("SSMT divergence z threshold", 0.2, 3.0, 0.85, 0.05)
         p.mn_window = st.slider("Market-neutral window", 100, 500, 250, 25)
         p.rev_horizon = st.slider("Reversal horizon (bars)", 4, 40, 12)
+        p.rev_gate = st.slider("Reversal-risk veto above", 0.50, 0.95, 0.75, 0.01)
         p.min_conviction = st.slider("Minimum conviction", 40, 85, 55)
         p.min_rr = st.slider("Minimum R:R", 1.0, 4.0, 1.5, 0.1)
         p.bt_max_hold = st.slider("Max hold (bars)", 12, 200, 72, 4)

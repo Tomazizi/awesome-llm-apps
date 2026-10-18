@@ -69,7 +69,7 @@ class Frame:
         return self.kind in ("real", "proxy")
 
     def __len__(self) -> int:
-        return len(self.filled.df)
+        return len(self.df)
 
 
 @dataclass
@@ -707,10 +707,6 @@ def fetch_asset(
             log.add(asset, name, False, "unparsable payload")
             continue
         df = _clean_df(df, interval)
-        if interval in ("2h", "4h") and parser in ("yahoo", "bitfinex", "binance", "coinbase", "kraken"):
-            pass  # native interval supported by these venues
-        elif parser in ("coingecko", "stooq"):
-            pass
         if len(df) < 30:
             continue
         kind = "proxy" if parser in ("binance", "kraken", "coinbase", "bitfinex", "coingecko") else "real"
