@@ -11,6 +11,9 @@ and attributed model-by-model so you can see which component actually carries th
 
 ### Features
 
+- **Full-stack web app** — FastAPI backend + React dashboard on one port, Docker-ready
+- **Real-time alerts** — webhook / Discord / Telegram, tier + score gated, per-direction
+  cooldown, pushed to open tabs over WebSocket, every alert journalled and graded
 - **Live XAU/USD spot ticker** with session clock, session change and data-provenance badge
 - **tCISD** — time-anchored *Change In State of Delivery*: liquidity sweep → delivery-candle
   open reclaim, decayed by an exponential half-life so a stale trigger scores near zero
@@ -32,6 +35,91 @@ and attributed model-by-model so you can see which component actually carries th
   Ollama) with catalyst maps, event-risk guidance and an explicit contradictions list
 - **Multi-source data layer** — Yahoo / Stooq server-side, a **browser bridge** for locked-down
   networks, broker CSV upload, and a clearly labelled synthetic fallback
+
+---
+
+## ⚡ The full-stack app (FastAPI + React, with real-time alerts)
+
+The Streamlit app is the research console. **This** is the deployable product: a single-port
+web application with a JSON/WebSocket API, a React dashboard, a SQLite signal journal and a
+push-alert engine. The analysis engine is *identical* — `server/` is a wrapper around `core/`,
+not a rewrite — so the web app and the research console can never drift apart.
+
+```
+browser  ──fetch real market data (CORS-friendly venues)──▶  POST /api/market/ingest
+         ◀── WebSocket /ws : analysis, price ticks, alerts ──  FastAPI  ──▶  core/ engine
+                                                                  │
+                                                            SQLite journal
+                                                                  │
+                                                     webhook · Telegram · Discord
+```
+
+**Why the browser fetches the data.** A server in a locked-down network (this sandbox is one)
+cannot reach market hosts, but the browser always can. So the SPA pulls OHLCV itself and POSTs
+it in. When the server *does* have outbound internet, `/api/market/refresh` fetches directly.
+`/api/status` reports which path is in play and the UI badges every series with its provenance:
+`real`, `proxy` (tokenised gold — a real, liquid, exchange-traded stand-in for spot) or
+`synthetic` (offline development only, never substituted silently).
+
+### Real-time alerts
+
+A signal only becomes an alert when it clears the conviction bar you set, and **only once per
+setup**. The cooldown matters: the same structural trigger stays live for many bars, and a desk
+that fires on every one of them is a desk that gets muted.
+
+- **Thresholds** — minimum tier (A/B/C), minimum score, direction filter, cooldown in bars
+- **Channels** — generic webhook (Zapier / Make / n8n / your own endpoint), Discord, Telegram,
+  or journal-only. Each has a **Test** button that sends a real message.
+- **Arming** — the engine re-evaluates on every ingest, on every parameter change and on a
+  background poll timer. Alerts are pushed to open tabs over WebSocket, so the page rings
+  immediately instead of waiting for the next refresh.
+- **Auditable** — every alert is written to the journal *first*, so the message you received and
+  the track record you can audit later are the same object. A background grader walks forward
+  through new bars and marks each one hit-stop / hit-target / expired, in R.
+
+### Run it
+
+```bash
+# 1. backend
+pip install -r requirements-server.txt
+
+# 2. frontend
+cd web && npm install && npm run build && cd ..
+
+# 3. one port, everything served from it
+uvicorn server.main:app --host 0.0.0.0 --port 8000
+# → http://localhost:8000        API docs: /api/docs
+```
+
+Or with Docker, which does both builds for you:
+
+```bash
+docker compose up --build      # → http://localhost:8000
+```
+
+For frontend development, run both — Vite proxies `/api` and `/ws` to the backend:
+
+```bash
+uvicorn server.main:app --port 8000 &
+cd web && npm run dev         # → http://localhost:5173
+```
+
+### API surface
+
+| group | endpoints |
+|---|---|
+| health | `GET /api/health` · `GET /api/status` · `GET /api/events` |
+| market | `POST /api/market/ingest` · `POST /api/spot` · `POST /api/market/refresh` · `DELETE /api/market/clear` |
+| analysis | `POST /api/analyze` · `GET /api/analysis` · `GET`/`POST /api/params` · `POST`/`GET /api/backtest` |
+| research | `POST /api/news/ingest` · `GET /api/news` · `POST /api/research` |
+| journal | `GET /api/journal` · `POST /api/journal/grade` · `DELETE /api/journal` |
+| alerts | `GET /api/alerts` · `POST /api/alerts/config` · `POST /api/alerts/test` · `POST /api/alerts/check` |
+| live | `WS /ws` — `hello`, `price`, `analysis`, `backtest`, `news`, `alert`, `journal` |
+
+On a cold start the app loads its first sample by itself, so the dashboard is populated the
+moment you open it.
+
+---
 
 ### How to get Started?
 
@@ -140,17 +228,32 @@ gold_trade_timing_analyzer/
 │   ├── research_agent.py           # RSS, lexicon scoring, LLM brief
 │   ├── llm.py                      # six-provider HTTP client
 │   └── plots.py                    # plotly figures
-├── tests/                          # head-less engine tests + Streamlit smoke test
+├── server/                         # ── the full-stack app ──
+│   ├── main.py                     # FastAPI app, 29 routes, WebSocket hub, static SPA
+│   ├── engine_service.py           # engine → JSON bridge (the only place frames become dicts)
+│   ├── alerts.py                   # gating, cooldown, dispatch to webhook/Telegram/Discord
+│   ├── store.py                    # in-memory market store + SQLite signal journal
+│   └── models.py                   # pydantic schemas
+├── web/                            # React + Vite dashboard
+│   ├── src/marketData.js           # browser-side fetch: tokenised gold, Yahoo via CORS relay
+│   ├── src/PriceChart.jsx          # candles + FVG / fib / CISD / trade-level overlays (SVG)
+│   ├── src/panels/                 # EntryTiming · Models · Backtest · Alerts · Journal · News · Data
+│   └── dist/                       # build output, served by FastAPI
+├── tests/                          # engine tests, Streamlit smoke test, API integration test
 ├── data/                           # drop broker CSV exports here
+├── Dockerfile                      # two-stage: node build → python serve, one port
+├── docker-compose.yml
+├── requirements-server.txt         # backend-only dependencies (no Streamlit)
 ├── DESIGN.md                       # full system design and model mathematics
-└── requirements.txt
+└── requirements.txt                # Streamlit app dependencies
 ```
 
 Run the tests with:
 
 ```bash
 python tests/test_engine.py              # analytic core
-GOLD_TIMING_NO_BRIDGE=1 python tests/test_app_smoke.py   # whole app, head-less
+GOLD_TIMING_NO_BRIDGE=1 python tests/test_app_smoke.py   # whole Streamlit app, head-less
+pytest tests/test_api.py -q              # full-stack API end-to-end (ingest → alerts)
 ```
 
 ### What It Can (and Cannot) Do
@@ -164,6 +267,7 @@ GOLD_TIMING_NO_BRIDGE=1 python tests/test_app_smoke.py   # whole app, head-less
 - Tell you, empirically, whether to enter now or wait for the retrace
 - Attribute realised P&L to individual sub-models via information coefficients
 - Run entirely offline, with internet, or behind a locked network via the browser bridge
+- Push a qualified setup to your phone the bar it qualifies, and grade it afterwards
 
 **Cannot do**
 

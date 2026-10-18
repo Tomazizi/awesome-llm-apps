@@ -1,0 +1,11 @@
+# The signal journal is runtime state, not source.
+journal.db
+data/*.csv
+
+# Frontend build artefacts
+web/node_modules/
+web/dist/
+
+__pycache__/
+*.pyc
+.venv/

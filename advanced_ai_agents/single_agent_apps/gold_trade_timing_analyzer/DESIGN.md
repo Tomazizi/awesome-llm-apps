@@ -313,7 +313,74 @@ Two layers, so the app degrades instead of breaking:
 
 ---
 
-## 7. Engineering notes
+## 7. Full-stack app: API, WebSocket hub and alert engine
+
+The Streamlit console and the web app share one engine. `server/engine_service.py` is the
+*only* place a DataFrame becomes JSON, so the two front-ends cannot drift, and no model
+mathematics lives outside `core/`.
+
+### 7.1 Why the browser fetches the data
+
+A server behind an egress allowlist cannot reach market hosts; a browser in front of one
+always can. Rather than fake it, the SPA pulls OHLCV itself and POSTs it to
+`/api/market/ingest`, and `/api/status` reports `server_has_network` so the UI can say which
+path is in play. When the server *does* have internet, `/api/market/refresh` uses the same
+provider chain as the Streamlit app. Every series carries its `kind`, and the UI badges it.
+
+### 7.2 Real-time hub
+
+`/ws` is a broadcast hub. Clients connect, receive a `hello` carrying current status and the
+last 60 events, then get pushed `price`, `analysis`, `backtest`, `news`, `alert` and
+`journal` frames. Clients may also send `ping` and `spot` (a browser-sourced tick), which is
+rebroadcast to every connected tab. Socket failures reconnect with exponential backoff.
+
+Two background coroutines run for the life of the process:
+
+* `alert_loop` — re-runs the engine every `poll_seconds` and evaluates alerts
+* `grade_loop` — every 5 minutes, walks the journal's open signals forward and closes the
+  ones that have hit a stop, hit a target, or expired at the max-hold horizon
+
+Analysis runs in `asyncio.to_thread` so a multi-second engine run never blocks the event loop.
+
+### 7.3 Alert gating
+
+An alert fires only when **all** of the following hold:
+
+1. alerts are armed,
+2. a trade is constructible on the latest bar,
+3. `tier >= min_tier` (A ≥ B ≥ C),
+4. `score >= min_score`,
+5. the direction is in the allow-list,
+6. the bar differs from the last bar that fired for this direction, and
+7. `cooldown_bars × interval_minutes` has elapsed since the last alert in that direction.
+
+Condition 6 kills duplicate announcements of a trigger that is still live. Condition 7 is the
+one that makes the output usable: a structural trigger persists for many bars, and firing on
+each one trains the recipient to ignore the channel.
+
+Every alert is written to the journal *before* dispatch, which is what makes the track record
+auditable — the message you received and the row that gets graded later are the same object.
+Dispatch is blocking HTTP wrapped in `asyncio.to_thread`, and each attempt is logged with its
+status.
+
+### 7.4 Persistence
+
+SQLite via the standard library, no ORM. Three tables: `signals` (the full component
+breakdown, gates and news bias at emission, then the graded outcome), `alerts` (dispatch
+log), `settings` (alert configuration). `UNIQUE(ts, direction, tier)` makes a duplicate emit
+for the same bar a no-op even if two processes race.
+
+### 7.5 Serialisation
+
+The engine leaks numpy scalars and NaN everywhere, and Starlette serialises with
+`allow_nan=False`, so a single unscrubbed float would turn a whole endpoint into a 500.
+`store.json_safe()` normalises recursively — NaN/Inf to `null`, numpy scalars to Python
+scalars, Timestamps to ISO strings — and is applied at the engine boundary. A test asserts
+that no `NaN` or `Infinity` token appears in any payload.
+
+---
+
+## 8. Engineering notes
 
 * **No look-ahead.** Pivots are stamped with the bar at which they become *known*
   (`i + right`), not the bar at which they form. Entries are at the next bar's open.
@@ -330,7 +397,7 @@ Two layers, so the app degrades instead of breaking:
 
 ---
 
-## 8. Known limitations
+## 9. Known limitations
 
 * **tCISD / SSMT / OTE are order-flow heuristics formalised with statistics.** The formalisation
   makes them reproducible and testable; it does not make the underlying premise a law.

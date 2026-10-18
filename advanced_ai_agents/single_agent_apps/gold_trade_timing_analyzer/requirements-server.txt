@@ -1,0 +1,7 @@
+# Backend only. The Streamlit app in this same directory needs the fuller
+# requirements.txt; this file is what the container installs.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pandas>=2.0
+numpy>=1.24
+requests>=2.31

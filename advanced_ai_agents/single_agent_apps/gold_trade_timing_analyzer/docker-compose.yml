@@ -1,0 +1,18 @@
+services:
+  desk:
+    build: .
+    image: gold-timing-desk:latest
+    container_name: gold-timing-desk
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - desk-data:/data
+    environment:
+      # SQLite journal + settings live on the named volume so alerts config and
+      # the signal track record survive a rebuild.
+      GOLD_TIMING_DB: /data/journal.db
+      TZ: UTC
+
+volumes:
+  desk-data:
