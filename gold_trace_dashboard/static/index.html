@@ -3,55 +3,145 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gold Trace — layered gold-market intelligence</title>
+<title>Gold Trace — Full Automation System</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<!-- ═══════════════ HERO — canvas stages: grow → strike → weave → trace ══ -->
 <header id="hero">
   <canvas id="trace-canvas" aria-label="Animated gold trace: recursive branches, lightning strike, spider hub"></canvas>
   <div id="hero-overlay">
     <div id="hero-top">
       <div>
         <h1>GOLD&nbsp;TRACE</h1>
-        <p class="tagline">No data source tracks physical gold live — so the system is built in
-          <b>layers, by update speed</b>.</p>
+        <p class="tagline">No data source tracks physical gold live — so the system is built in <b>layers</b>, now running <b>fully autonomous</b>.</p>
       </div>
       <div id="hero-chips">
         <span id="mode-chip" class="chip">SIM</span>
+        <span id="autopilot-chip" class="chip">AUTOPILOT ▸ OFF</span>
         <span id="tg-chip" class="chip">TG: queued</span>
         <a class="chip chip-link" href="/docs" target="_blank">API</a>
       </div>
     </div>
     <div id="stance-strip">
-      <div class="stance-block">
-        <span class="stance-label">COMPOSITE</span>
-        <span id="stance-value" class="stance-value">···</span>
-        <span id="stance-name" class="stance-name">booting</span>
-      </div>
-      <div class="stance-block">
-        <span class="stance-label">STRUCTURAL</span>
-        <span id="struct-mini" class="stance-value small">···</span>
-        <span id="struct-name" class="stance-name">—</span>
-      </div>
-      <div class="stance-block">
-        <span class="stance-label">MACRO</span>
-        <span id="macro-mini" class="stance-value small">···</span>
-        <span id="macro-name" class="stance-name">—</span>
-      </div>
-      <div class="stance-block" id="spot-block">
-        <span class="stance-label">SPOT XAU</span>
-        <span id="spot-mini" class="stance-value small gold">···</span>
-        <span id="spot-chg" class="stance-name">—</span>
-      </div>
+      <div class="stance-block"><span class="stance-label">COMPOSITE</span><span id="stance-value" class="stance-value">···</span><span id="stance-name" class="stance-name">booting</span></div>
+      <div class="stance-block"><span class="stance-label">STRUCTURAL</span><span id="struct-mini" class="stance-value small">···</span><span id="struct-name" class="stance-name">—</span></div>
+      <div class="stance-block"><span class="stance-label">MACRO</span><span id="macro-mini" class="stance-value small">···</span><span id="macro-name" class="stance-name">—</span></div>
+      <div class="stance-block" id="spot-block"><span class="stance-label">SPOT XAU</span><span id="spot-mini" class="stance-value small gold">···</span><span id="spot-chg" class="stance-name">—</span></div>
     </div>
     <p id="stage-caption">stage 1 · grow — recursive branches, randomized angles &amp; lengths</p>
   </div>
 </header>
 
 <main>
+
+<!-- ═══════════════ AUTOPILOT COMMAND CENTER ═══════════════════════ -->
+<section id="autopilot" class="card autopilot-card">
+  <div class="autopilot-head">
+    <div>
+      <h2>⚡ Full Automation — Autopilot Command Center <span class="hint">rules engine · auto-signals · paper trades · self-healing</span></h2>
+      <p class="autopilot-sub">Autonomous loop every ~8s: scores → rules → signals → paper positions → Telegram/webhook. Runs even with browser closed.</p>
+    </div>
+    <div class="autopilot-controls">
+      <label class="toggle"><input type="checkbox" id="auto-enabled"><span class="slider"></span><span class="toggle-label">Autopilot</span></label>
+      <select id="auto-mode" class="auto-select">
+        <option value="off">OFF</option>
+        <option value="assist">ASSIST (alerts + signals)</option>
+        <option value="full_auto">FULL AUTO (trades)</option>
+      </select>
+      <label class="toggle"><input type="checkbox" id="paper-enabled"><span class="slider"></span><span class="toggle-label">Paper trading</span></label>
+      <button id="btn-run-cycle" class="btn-small">▶ Run cycle</button>
+      <button id="btn-gen-report" class="btn-small ghost">Generate report</button>
+    </div>
+  </div>
+
+  <div class="grid-4 autopilot-kpis">
+    <div class="kpi"><span class="kpi-v" id="kpi-state">···</span><span class="kpi-k">Autopilot</span></div>
+    <div class="kpi"><span class="kpi-v" id="kpi-rules">···</span><span class="kpi-k">Active rules</span></div>
+    <div class="kpi"><span class="kpi-v" id="kpi-pnl">···</span><span class="kpi-k">Paper PnL (closed)</span></div>
+    <div class="kpi"><span class="kpi-v" id="kpi-open">···</span><span class="kpi-k">Open positions</span></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card nested">
+      <h3>🤖 Automation Rules <span class="hint">IF trigger THEN action — cooldown protects from spam</span>
+        <button id="btn-new-rule" class="btn-small right">+ New rule</button>
+      </h3>
+      <div id="rules-list" class="stack"></div>
+
+      <!-- rule builder (hidden by default) -->
+      <form id="rule-form" class="rule-form hidden" autocomplete="off">
+        <div class="form-grid">
+          <label>Name <input name="name" required placeholder="Composite breakout → LONG"></label>
+          <label>Priority <input type="number" name="priority" value="5" min="1" max="10"></label>
+          <label>Cooldown (s) <input type="number" name="cooldown_s" value="600"></label>
+          <label>Trigger type
+            <select name="trigger_type" id="trigger-type">
+              <option value="score_threshold">Score threshold</option>
+              <option value="whale_flow">Whale flow</option>
+              <option value="price_level">Price level</option>
+              <option value="premium_spike">SGE premium spike</option>
+              <option value="layer_alert">Layer alert</option>
+              <option value="composite_flip">Composite flip</option>
+              <option value="schedule">Schedule (always)</option>
+            </select>
+          </label>
+          <label>Action type
+            <select name="action_type" id="action-type">
+              <option value="generate_signal">Generate signal</option>
+              <option value="paper_trade">Paper trade</option>
+              <option value="telegram">Telegram alert</option>
+              <option value="webhook">Webhook</option>
+              <option value="journal_draft">Journal draft</option>
+              <option value="generate_report">Generate report</option>
+            </select>
+          </label>
+          <label>Enabled <select name="enabled"><option value="1">Yes</option><option value="0">No</option></select></label>
+        </div>
+        <div class="grid-2">
+          <label>Trigger params (JSON) <textarea name="trigger_params" rows="3" placeholder='{"score":"composite","op":">","value":35}'></textarea></label>
+          <label>Action params (JSON) <textarea name="action_params" rows="3" placeholder='{"direction":"LONG"}'></textarea></label>
+        </div>
+        <label>Description <input name="description" placeholder="When composite >35, emit LONG"></label>
+        <div class="form-actions">
+          <button type="submit">Save rule</button>
+          <button type="button" id="rule-cancel" class="ghost">Cancel</button>
+          <span id="rule-msg" class="hint"></span>
+        </div>
+      </form>
+      <p class="hint">Tip: Try <code>score_threshold {"score":"composite","op":">","value":35}</code> + <code>paper_trade {"direction":"AUTO"}</code></p>
+    </div>
+
+    <div class="card nested">
+      <h3>📡 Auto Signals <span class="hint">latest 12 — rule / auto_composite / manual</span>
+        <button id="btn-emit-long" class="btn-small ghost right">Emit LONG</button>
+        <button id="btn-emit-short" class="btn-small ghost right" style="margin-right:4px">Emit SHORT</button>
+      </h3>
+      <div id="signals-list" class="stack feed" style="max-height:340px"></div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:12px">
+    <div class="card nested">
+      <h3>📊 Paper Trading Ledger <span class="hint">size by risk 1.2% · SL 1.2% · TP 2.4% · auto SL/TP</span></h3>
+      <div id="pnl-summary" class="stat-row" style="grid-template-columns:repeat(4,1fr)"></div>
+      <div style="display:flex;gap:6px;margin:8px 0">
+        <button id="btn-paper-long" class="btn-small">Paper LONG 5oz</button>
+        <button id="btn-paper-short" class="btn-small">Paper SHORT 5oz</button>
+      </div>
+      <div id="positions-open" class="table-scroll"></div>
+      <h4 style="margin-top:10px">History (last 20)</h4>
+      <div id="positions-history" class="table-scroll"></div>
+    </div>
+    <div class="card nested">
+      <h3>📝 Automation Log <span class="hint">last 14 runs + auto reports</span></h3>
+      <div id="auto-runs" class="stack feed" style="max-height:220px"></div>
+      <h4>Auto Reports</h4>
+      <div id="auto-reports" class="stack"></div>
+    </div>
+  </div>
+</section>
 
 <!-- ═══════════════ SCORES ══════════════════════════════════════════════ -->
 <section id="scores" class="grid-3">
@@ -160,7 +250,7 @@
 
 <!-- ═══════════════ LAYER MAP ═══════════════════════════════════════════ -->
 <section id="layers-section" class="card">
-  <h2>Layer map <span class="hint">one scheduled ingestor per source · ordered by update speed</span></h2>
+  <h2>Layer map <span class="hint">one scheduled ingestor per source · ordered by update speed — click to pause/resume</span></h2>
   <div id="layer-grid"></div>
 </section>
 
@@ -185,16 +275,10 @@
     <form id="journal-form" autocomplete="off">
       <div class="form-grid">
         <label>Date <input type="date" name="trade_date" required></label>
-        <label>Setup
-          <select name="setup_type" id="setup-type-select"></select>
-        </label>
-        <label>Direction
-          <select name="direction"><option>LONG</option><option>SHORT</option></select>
-        </label>
+        <label>Setup <select name="setup_type" id="setup-type-select"></select></label>
+        <label>Direction <select name="direction"><option>LONG</option><option>SHORT</option></select></label>
         <label>Level <input type="number" step="0.1" name="level" placeholder="4085.5"></label>
-        <label>Result
-          <select name="result"><option>Win</option><option>Loss</option><option>BE</option></select>
-        </label>
+        <label>Result <select name="result"><option>Win</option><option>Loss</option><option>BE</option></select></label>
         <label>R multiple <input type="number" step="0.1" name="r_multiple" placeholder="1.8"></label>
       </div>
       <label class="full">Trigger <input type="text" name="trigger" placeholder="SGE premium spike + whale transfer to vault…"></label>
@@ -211,7 +295,7 @@
 </main>
 
 <footer>
-  <p><b>Gold Trace</b> — ingestors → SQLite → structural/macro scores · event engine · anomaly alerts · journal → dashboard + Telegram.
+  <p><b>Gold Trace — Full Automation</b> — ingestors → scores → rules → signals → paper ledger → Telegram/webhook · self-healing scheduler
      <span id="foot-mode"></span> · <a href="/docs">API docs</a> · <a href="/api/status">status</a></p>
 </footer>
 

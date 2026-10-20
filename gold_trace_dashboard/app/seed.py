@@ -293,4 +293,58 @@ def seed_if_empty() -> bool:
     for kind, sev, title, body, hours_ago in seeded_alerts:
         db.insert_alert(kind, sev, title, body, None, None,
                         "queued (no bot token)", now - hours_ago * 3600)
+
+    # ------------------------------------------------------------- autopilot seed
+    try:
+        from .engines.automation import ensure_default_rules
+        ensure_default_rules()
+        # autopilot state
+        if db.get_state("autopilot_enabled") is None:
+            db.set_state("autopilot_enabled","1")
+        if db.get_state("autopilot_mode") is None:
+            db.set_state("autopilot_mode","full_auto")
+        if db.get_state("paper_enabled") is None:
+            db.set_state("paper_enabled","1")
+        if db.get_state("auto_report_enabled") is None:
+            db.set_state("auto_report_enabled","1")
+        # seed 12 signals (mix of rule + auto_composite)
+        base_price = spot_hist[-1]
+        for i in range(12):
+            ts = now - (12-i)*7200 - random.randint(0,1800)
+            direction = random.choice(["LONG","SHORT","LONG","LONG","SHORT"])
+            comp = round(random.uniform(-48,62),1)
+            struct = round(random.uniform(-20,55),1)
+            macro_v = round(random.uniform(-30,40),1)
+            strength = abs(comp)
+            price = round(base_price + random.uniform(-28,28),1)
+            reason = random.choice([f"Composite {comp} stance shift", "SGE premium spike → LONG", "Whale sweep 12k oz", "Structural trap SHORT", "Auto composite signal"])
+            db.insert_signal(ts, random.choice(["rule","auto_composite","paper_trade"]), direction, strength, price, comp, struct, macro_v, reason, status=random.choice(["active","active","closed","active"]))
+        # seed 3 open + 9 closed paper positions
+        for i in range(12):
+            sig = random.randint(1,12)
+            direction = random.choice(["LONG","SHORT"])
+            entry = round(base_price + random.uniform(-35,35),1)
+            size = round(random.uniform(4.0,18.0),1)
+            sl = round(entry * (0.988 if direction=="LONG" else 1.012),1)
+            tp = round(entry * (1.024 if direction=="LONG" else 0.976),1)
+            if i < 3:
+                # open
+                db.open_position(sig, direction, entry, size, stop_loss=sl, take_profit=tp, note="seed open")
+            else:
+                pid = db.open_position(sig, direction, entry, size, stop_loss=sl, take_profit=tp, note="seed closed")
+                # close with pnl
+                exit_price = round(entry + random.uniform(-18, 28) * (1 if direction=="LONG" else -1),1)
+                db.close_position(pid, exit_price)
+        # automation runs log
+        rules = db.all_automation_rules()
+        for i in range(14):
+            r = random.choice(rules) if rules else None
+            ts = now - random.randint(600, 86400)
+            db.log_run(r["id"] if r else None, r["trigger_type"] if r else "score_threshold", f"Rule '{r['name']}' fired" if r else "Auto composite signal", "ok", context={"seed":True}, result={"signal_id": random.randint(1,5)})
+        # auto reports
+        for d in [1,2,3]:
+            db.insert_report("daily", f"Daily Gold Trace – {'LONG BIAS' if random.random()>0.5 else 'BALANCED'}", {"seed":True,"scores":{"composite": round(random.uniform(10,45),1)}})
+    except Exception as e:
+        # don't fail seed on automation
+        pass
     return True

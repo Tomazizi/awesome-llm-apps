@@ -92,6 +92,84 @@ CREATE TABLE IF NOT EXISTS ingest_log(
     detail    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ingest_source_ts ON ingest_log(source, ts);
+
+-- Full Automation System
+CREATE TABLE IF NOT EXISTS automation_rules(
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    description     TEXT,
+    trigger_type    TEXT NOT NULL,
+    trigger_params  TEXT,
+    action_type     TEXT NOT NULL,
+    action_params   TEXT,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    cooldown_s      INTEGER NOT NULL DEFAULT 600,
+    last_fired_ts   INTEGER,
+    created_ts      INTEGER NOT NULL,
+    updated_ts      INTEGER,
+    priority        INTEGER NOT NULL DEFAULT 5
+);
+CREATE TABLE IF NOT EXISTS automation_runs(
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id         INTEGER REFERENCES automation_rules(id) ON DELETE SET NULL,
+    ts              INTEGER NOT NULL,
+    trigger_kind    TEXT,
+    context_snapshot TEXT,
+    action_result   TEXT,
+    status          TEXT NOT NULL,
+    title           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_runs_ts ON automation_runs(ts);
+
+CREATE TABLE IF NOT EXISTS signals(
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              INTEGER NOT NULL,
+    rule_id         INTEGER REFERENCES automation_rules(id) ON DELETE SET NULL,
+    source          TEXT NOT NULL,
+    direction       TEXT NOT NULL,
+    strength        REAL,
+    price           REAL,
+    composite_score REAL,
+    structural_score REAL,
+    macro_score     REAL,
+    reason          TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    extra           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
+
+CREATE TABLE IF NOT EXISTS paper_positions(
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id       INTEGER REFERENCES signals(id) ON DELETE SET NULL,
+    open_ts         INTEGER NOT NULL,
+    close_ts        INTEGER,
+    direction       TEXT NOT NULL,
+    entry_price     REAL NOT NULL,
+    exit_price      REAL,
+    size_oz         REAL NOT NULL,
+    stop_loss       REAL,
+    take_profit     REAL,
+    pnl             REAL,
+    r_multiple      REAL,
+    status          TEXT NOT NULL DEFAULT 'open',
+    note            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_positions_status ON paper_positions(status);
+
+CREATE TABLE IF NOT EXISTS automation_state(
+    key             TEXT PRIMARY KEY,
+    value           TEXT NOT NULL,
+    updated_ts      INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auto_reports(
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              INTEGER NOT NULL,
+    period          TEXT NOT NULL,
+    title           TEXT,
+    payload         TEXT,
+    status          TEXT NOT NULL DEFAULT 'generated'
+);
 """
 
 
@@ -115,12 +193,6 @@ def now() -> int:
 # ------------------------------------------------------------ observations
 def upsert_obs(series: str, ts: int, value: float, mode: str = "sim",
                extra: Optional[dict] = None) -> None:
-    """Insert or replace the observation for (series, ts-bucket).
-
-    Daily/weekly/monthly series are bucketed to their period start so a
-    job that re-runs inside the same period updates today's bar instead
-    of duplicating it.
-    """
     with _lock, connect() as conn:
         conn.execute(
             """INSERT INTO observations(series, ts, value, extra, mode)
@@ -296,3 +368,162 @@ def ingest_status() -> dict[str, dict[str, Any]]:
 def table_count(table: str) -> int:
     with _lock, connect() as conn:
         return conn.execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
+
+
+# ---------------- automation helpers
+def get_state(key: str, default: str | None = None) -> str | None:
+    with _lock, connect() as conn:
+        row = conn.execute("SELECT value FROM automation_state WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+def set_state(key: str, value: str) -> None:
+    with _lock, connect() as conn:
+        conn.execute(
+            """INSERT INTO automation_state(key,value,updated_ts)
+               VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts""",
+            (key, value, now()),
+        )
+
+def all_automation_rules(enabled_only: bool = False) -> list[dict[str, Any]]:
+    with _lock, connect() as conn:
+        q = "SELECT * FROM automation_rules"
+        if enabled_only:
+            q += " WHERE enabled=1"
+        q += " ORDER BY priority DESC, created_ts DESC"
+        rows = conn.execute(q).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("trigger_params","action_params"):
+            if d[k]:
+                try: d[k] = json.loads(d[k])
+                except: pass
+        d["enabled"] = bool(d["enabled"])
+        out.append(d)
+    return out
+
+def get_rule(rid: int) -> Optional[dict[str,Any]]:
+    with _lock, connect() as conn:
+        row = conn.execute("SELECT * FROM automation_rules WHERE id=?", (rid,)).fetchone()
+    if not row: return None
+    d=dict(row)
+    for k in ("trigger_params","action_params"):
+        if d[k]:
+            try: d[k]=json.loads(d[k])
+            except: pass
+    d["enabled"]=bool(d["enabled"])
+    return d
+
+def insert_rule(name: str, trigger_type: str, trigger_params: dict, action_type: str, action_params: dict,
+                description: str = "", enabled: bool = True, cooldown_s: int = 600, priority: int = 5) -> int:
+    with _lock, connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO automation_rules(name,description,trigger_type,trigger_params,action_type,action_params,enabled,cooldown_s,created_ts,priority)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (name, description, trigger_type, json.dumps(trigger_params), action_type, json.dumps(action_params),
+             1 if enabled else 0, cooldown_s, now(), priority),
+        )
+        return int(cur.lastrowid)
+
+def update_rule(rid: int, **fields) -> None:
+    if not fields: return
+    # json-encode dict params
+    for k in ("trigger_params","action_params"):
+        if k in fields and isinstance(fields[k], dict):
+            fields[k]=json.dumps(fields[k])
+    sets = ", ".join(f"{k}=?" for k in fields)
+    vals = list(fields.values()) + [now(), rid]
+    sets += ", updated_ts=?"
+    with _lock, connect() as conn:
+        conn.execute(f"UPDATE automation_rules SET {sets} WHERE id=?", vals)
+
+def delete_rule(rid: int) -> None:
+    with _lock, connect() as conn:
+        conn.execute("DELETE FROM automation_rules WHERE id=?", (rid,))
+
+def log_run(rule_id: int | None, trigger_kind: str, title: str, status: str, context: dict | None = None, result: dict | None = None) -> int:
+    with _lock, connect() as conn:
+        cur=conn.execute(
+            """INSERT INTO automation_runs(rule_id,ts,trigger_kind,context_snapshot,action_result,status,title)
+               VALUES(?,?,?,?,?,?,?)""",
+            (rule_id, now(), trigger_kind, json.dumps(context) if context else None,
+             json.dumps(result) if result else None, status, title),
+        )
+        return int(cur.lastrowid)
+
+def recent_runs(limit: int = 50) -> list[dict[str,Any]]:
+    with _lock, connect() as conn:
+        rows = conn.execute("SELECT * FROM automation_runs ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+def insert_signal(ts:int, source:str, direction:str, strength:float, price:float, composite:float, structural:float, macro:float, reason:str, rule_id:int|None=None, status:str="active", extra:dict|None=None) -> int:
+    with _lock, connect() as conn:
+        cur=conn.execute(
+            """INSERT INTO signals(ts,rule_id,source,direction,strength,price,composite_score,structural_score,macro_score,reason,status,extra)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (ts, rule_id, source, direction, strength, price, composite, structural, macro, reason, status, json.dumps(extra) if extra else None),
+        )
+        return int(cur.lastrowid)
+
+def recent_signals(limit:int=40) -> list[dict[str,Any]]:
+    with _lock, connect() as conn:
+        rows=conn.execute("SELECT * FROM signals ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+def update_signal_status(sid:int, status:str) -> None:
+    with _lock, connect() as conn:
+        conn.execute("UPDATE signals SET status=? WHERE id=?", (status, sid))
+
+# paper positions
+def open_position(signal_id:int, direction:str, entry_price:float, size_oz:float, stop_loss:float|None=None, take_profit:float|None=None, note:str="") -> int:
+    with _lock, connect() as conn:
+        cur=conn.execute(
+            """INSERT INTO paper_positions(signal_id,open_ts,direction,entry_price,size_oz,stop_loss,take_profit,status,note)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (signal_id, now(), direction, entry_price, size_oz, stop_loss, take_profit, "open", note),
+        )
+        return int(cur.lastrowid)
+
+def open_positions() -> list[dict[str,Any]]:
+    with _lock, connect() as conn:
+        rows=conn.execute("SELECT * FROM paper_positions WHERE status='open' ORDER BY open_ts DESC").fetchall()
+    return [dict(r) for r in rows]
+
+def all_positions(limit:int=60) -> list[dict[str,Any]]:
+    with _lock, connect() as conn:
+        rows=conn.execute("SELECT * FROM paper_positions ORDER BY open_ts DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+def close_position(pid:int, exit_price:float) -> Optional[dict[str,Any]]:
+    with _lock, connect() as conn:
+        row=conn.execute("SELECT * FROM paper_positions WHERE id=?", (pid,)).fetchone()
+        if not row: return None
+        p=dict(row)
+        pnl = (exit_price - p["entry_price"]) * p["size_oz"] if p["direction"]=="LONG" else (p["entry_price"]-exit_price)*p["size_oz"]
+        risk = abs(p["entry_price"]-(p["stop_loss"] or p["entry_price"]*0.97))
+        r = pnl / (risk*p["size_oz"]) if risk else 0
+        conn.execute("UPDATE paper_positions SET close_ts=?, exit_price=?, pnl=?, r_multiple=?, status='closed' WHERE id=?",
+                     (now(), exit_price, pnl, r, pid))
+        p.update({"exit_price":exit_price,"pnl":pnl,"r_multiple":r,"status":"closed"})
+        return p
+
+def paper_pnl_summary() -> dict[str,Any]:
+    with _lock, connect() as conn:
+        rows=conn.execute("SELECT * FROM paper_positions").fetchall()
+    closed=[dict(r) for r in rows if dict(r)["status"]=="closed"]
+    total = sum(c["pnl"] or 0 for c in closed)
+    wins=len([c for c in closed if (c["pnl"] or 0) > 0])
+    losses=len([c for c in closed if (c["pnl"] or 0) < 0])
+    net_r = sum(c["r_multiple"] or 0 for c in closed)
+    return {"total_pnl": round(total,2), "closed": len(closed), "wins": wins, "losses": losses, "win_rate": round(wins/len(closed)*100,1) if closed else None, "net_r": round(net_r,2), "open": len([r for r in rows if dict(r)["status"]=="open"])}
+
+def recent_reports(limit:int=20) -> list[dict[str,Any]]:
+    with _lock, connect() as conn:
+        rows=conn.execute("SELECT * FROM auto_reports ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+def insert_report(period:str, title:str, payload:dict) -> int:
+    with _lock, connect() as conn:
+        cur=conn.execute("INSERT INTO auto_reports(ts,period,title,payload) VALUES(?,?,?,?)",
+                         (now(), period, title, json.dumps(payload)))
+        return int(cur.lastrowid)

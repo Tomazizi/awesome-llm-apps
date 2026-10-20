@@ -16,26 +16,31 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.environ.get("GOLD_TRACE_DB", str(DATA_DIR / "gold_trace.db"))
 
 # ---------------------------------------------------------------- live keys
-# Price / market
-METALS_API_KEY = os.environ.get("METALS_API_KEY", "")            # metals-api.com / goldapi.io
-GOLDAPI_IO_KEY = os.environ.get("GOLDAPI_IO_KEY", "")            # goldapi.io XAU
-# On-chain whales
-ETHERSCAN_API_KEY = os.environ.get("ETHERSCAN_API_KEY", "")      # PAXG / XAUT ERC-20 transfers
-ALCHEMY_API_KEY = os.environ.get("ALCHEMY_API_KEY", "")          # fallback RPC
-# Macro (FRED)
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "")                # DFII10 (TIPS), DTWEXBGS (DXY), DCOILBRENTEU
-# Alerts
+METALS_API_KEY = os.environ.get("METALS_API_KEY", "")
+GOLDAPI_IO_KEY = os.environ.get("GOLDAPI_IO_KEY", "")
+ETHERSCAN_API_KEY = os.environ.get("ETHERSCAN_API_KEY", "")
+ALCHEMY_API_KEY = os.environ.get("ALCHEMY_API_KEY", "")
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# ---------------------------------------------------------------- run mode
-# DEMO_SPEEDUP compresses the "daily/weekly/monthly" ingest cadence so a
-# fresh visitor sees every layer tick within minutes instead of days.
-DEMO_SPEEDUP = float(os.environ.get("DEMO_SPEEDUP", "1"))        # 1 = demo cadence below
-SIM_SHOCKS = os.environ.get("SIM_SHOCKS", "1") == "1"            # inject anomalies in sim mode
+# Webhook for automation (generic outbound)
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 
-# tick intervals in seconds (already demo-compressed; real deploy would use
-# cron-style schedules: live=5s..1m, daily=1h, weekly=daily, monthly=daily)
+# ---------------------------------------------------------------- run mode
+DEMO_SPEEDUP = float(os.environ.get("DEMO_SPEEDUP", "1"))
+SIM_SHOCKS = os.environ.get("SIM_SHOCKS", "1") == "1"
+
+# ---------------------------------------------------------------- autopilot
+AUTOPILOT_ENABLED = os.environ.get("AUTOPILOT_ENABLED", "1") == "1"
+AUTOPILOT_MODE = os.environ.get("AUTOPILOT_MODE", "assist")  # off | assist | full_auto
+PAPER_ENABLED = os.environ.get("PAPER_ENABLED", "1") == "1"
+PAPER_INITIAL_BALANCE = float(os.environ.get("PAPER_INITIAL_BALANCE", "50000"))
+PAPER_RISK_PER_TRADE = float(os.environ.get("PAPER_RISK_PER_TRADE", "0.012"))  # 1.2% per trade
+PAPER_MAX_OPEN = int(os.environ.get("PAPER_MAX_OPEN", "3"))
+AUTO_REPORT_ENABLED = os.environ.get("AUTO_REPORT_ENABLED", "1") == "1"
+
 INTERVALS = {
     "price_market":   max(3.0,  4   / DEMO_SPEEDUP),
     "onchain":        max(4.0,  6   / DEMO_SPEEDUP),
@@ -47,9 +52,12 @@ INTERVALS = {
     "central_banks":  max(45.0, 240 / DEMO_SPEEDUP),
     "trade_flows":    max(60.0, 300 / DEMO_SPEEDUP),
     "institutions":   max(90.0, 480 / DEMO_SPEEDUP),
+    # automation loops
+    "automation":      max(4.0,  8   / DEMO_SPEEDUP),
+    "signals":         max(5.0,  10  / DEMO_SPEEDUP),
+    "paper_trading":   max(5.0,  10  / DEMO_SPEEDUP),
 }
 
-# ---------------------------------------------------------------- assets
 PAXG_ADDRESS = "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
 XAUT_ADDRESS = "0x68749665FF8D2d112Fa859AA293F07A622782F38"
 
