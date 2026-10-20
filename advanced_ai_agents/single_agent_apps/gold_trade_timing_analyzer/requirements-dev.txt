@@ -1,0 +1,8 @@
+# Test-only dependencies. Not installed in the container image.
+#
+# httpx2: Starlette >= 0.47 dropped support for `httpx` in its TestClient and
+# now requires the `httpx2` package. Tests import TestClient at module scope,
+# so a missing httpx2 fails at collection rather than at the first request.
+pytest>=7.0
+httpx2>=2.0
+websockets>=12.0

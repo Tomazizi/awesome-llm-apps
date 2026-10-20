@@ -244,8 +244,15 @@ gold_trade_timing_analyzer/
 ├── Dockerfile                      # two-stage: node build → python serve, one port
 ├── docker-compose.yml
 ├── requirements-server.txt         # backend-only dependencies (no Streamlit)
+├── requirements-dev.txt            # test-only: pytest + httpx2 + websockets
 ├── DESIGN.md                       # full system design and model mathematics
 └── requirements.txt                # Streamlit app dependencies
+```
+
+Install the test-only dependencies first:
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 Run the tests with:
@@ -255,6 +262,10 @@ python tests/test_engine.py              # analytic core
 GOLD_TIMING_NO_BRIDGE=1 python tests/test_app_smoke.py   # whole Streamlit app, head-less
 pytest tests/test_api.py -q              # full-stack API end-to-end (ingest → alerts)
 ```
+
+> Starlette ≥ 0.47 requires `httpx2` (not `httpx`) for its `TestClient`, which is why
+> `requirements-dev.txt` exists separately from `requirements-server.txt` — the container
+> image never installs test dependencies.
 
 ### What It Can (and Cannot) Do
 
