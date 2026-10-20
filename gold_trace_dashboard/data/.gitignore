@@ -1,0 +1,4 @@
+# runtime artifacts stay out of git
+*.db
+*.db-wal
+*.db-shm

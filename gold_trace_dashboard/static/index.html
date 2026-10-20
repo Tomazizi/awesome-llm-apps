@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gold Trace — layered gold-market intelligence</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ═══════════════ HERO — canvas stages: grow → strike → weave → trace ══ -->
+<header id="hero">
+  <canvas id="trace-canvas" aria-label="Animated gold trace: recursive branches, lightning strike, spider hub"></canvas>
+  <div id="hero-overlay">
+    <div id="hero-top">
+      <div>
+        <h1>GOLD&nbsp;TRACE</h1>
+        <p class="tagline">No data source tracks physical gold live — so the system is built in
+          <b>layers, by update speed</b>.</p>
+      </div>
+      <div id="hero-chips">
+        <span id="mode-chip" class="chip">SIM</span>
+        <span id="tg-chip" class="chip">TG: queued</span>
+        <a class="chip chip-link" href="/docs" target="_blank">API</a>
+      </div>
+    </div>
+    <div id="stance-strip">
+      <div class="stance-block">
+        <span class="stance-label">COMPOSITE</span>
+        <span id="stance-value" class="stance-value">···</span>
+        <span id="stance-name" class="stance-name">booting</span>
+      </div>
+      <div class="stance-block">
+        <span class="stance-label">STRUCTURAL</span>
+        <span id="struct-mini" class="stance-value small">···</span>
+        <span id="struct-name" class="stance-name">—</span>
+      </div>
+      <div class="stance-block">
+        <span class="stance-label">MACRO</span>
+        <span id="macro-mini" class="stance-value small">···</span>
+        <span id="macro-name" class="stance-name">—</span>
+      </div>
+      <div class="stance-block" id="spot-block">
+        <span class="stance-label">SPOT XAU</span>
+        <span id="spot-mini" class="stance-value small gold">···</span>
+        <span id="spot-chg" class="stance-name">—</span>
+      </div>
+    </div>
+    <p id="stage-caption">stage 1 · grow — recursive branches, randomized angles &amp; lengths</p>
+  </div>
+</header>
+
+<main>
+
+<!-- ═══════════════ SCORES ══════════════════════════════════════════════ -->
+<section id="scores" class="grid-3">
+  <div class="card gauge-card">
+    <h2>Structural score <span class="hint">long-term bias · slow layers</span></h2>
+    <canvas id="gauge-structural" class="gauge"></canvas>
+    <p id="struct-bias" class="bias-line">—</p>
+    <div id="struct-factors" class="factors"></div>
+    <p id="struct-playbook" class="playbook"></p>
+  </div>
+  <div class="card gauge-card">
+    <h2>Macro score <span class="hint">directional lean · fast layers</span></h2>
+    <canvas id="gauge-macro" class="gauge"></canvas>
+    <p id="macro-bias" class="bias-line">—</p>
+    <div id="macro-factors" class="factors"></div>
+  </div>
+  <div class="card gauge-card">
+    <h2>Composite <span class="hint">60% structure + 40% macro</span></h2>
+    <canvas id="gauge-composite" class="gauge"></canvas>
+    <p id="comp-bias" class="bias-line">—</p>
+    <p id="comp-modifier" class="playbook"></p>
+    <div class="kv" id="comp-kv"></div>
+  </div>
+</section>
+
+<!-- ═══════════════ EVENT ENGINE ════════════════════════════════════════ -->
+<section id="events" class="grid-2">
+  <div class="card">
+    <h2>Event engine <span class="hint">PCE / NFP countdown · reaction matrix</span></h2>
+    <div id="countdown-cards"></div>
+    <h3>Reaction matrix <span id="matrix-cred" class="hint"></span></h3>
+    <div id="matrix-box"></div>
+  </div>
+  <div class="card">
+    <h2>Released prints <span class="hint">actual vs consensus · 24h reaction</span></h2>
+    <div id="event-history" class="table-scroll"></div>
+  </div>
+</section>
+
+<!-- ═══════════════ LIVE MARKET ═════════════════════════════════════════ -->
+<section id="market" class="grid-2">
+  <div class="card">
+    <h2>XAU spot &amp; COMEX GC <span class="hint">live layer · 5-min bars</span>
+      <span id="oi-chip" class="chip right-chip"></span></h2>
+    <canvas id="chart-price" class="chart tall"></canvas>
+  </div>
+  <div class="card">
+    <h2>On-chain whale tape <span class="hint">PAXG / XAUT ≥ 1k oz</span>
+      <span id="whale-agg" class="chip right-chip"></span></h2>
+    <div id="whale-feed" class="feed"></div>
+  </div>
+</section>
+
+<section class="grid-2">
+  <div class="card">
+    <h2>Real yields &amp; cut odds <span class="hint">TIPS 10y (FRED) · FedWatch Dec</span></h2>
+    <canvas id="chart-yields" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Dollar &amp; energy <span class="hint">DXY · Brent</span></h2>
+    <canvas id="chart-fx" class="chart"></canvas>
+  </div>
+</section>
+
+<!-- ═══════════════ PHYSICAL & FLOWS ════════════════════════════════════ -->
+<section class="grid-2">
+  <div class="card">
+    <h2>ETF holdings <span class="hint">daily layer · GLD &amp; IAU tonnes</span></h2>
+    <canvas id="chart-etf" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>COMEX warehouse stocks <span class="hint">daily layer · registered vs eligible (Moz)</span></h2>
+    <canvas id="chart-comex" class="chart"></canvas>
+  </div>
+</section>
+
+<section class="grid-3">
+  <div class="card">
+    <h2>Asia premiums <span class="hint">SGE &amp; India over LBMA ($/oz)</span></h2>
+    <canvas id="chart-premium" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>SGE withdrawals <span class="hint">weekly layer · tonnes/week</span></h2>
+    <canvas id="chart-withdrawals" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>CFTC COT <span class="hint">weekly layer · managed money vs commercials</span></h2>
+    <canvas id="chart-cot" class="chart"></canvas>
+  </div>
+</section>
+
+<section class="grid-3">
+  <div class="card">
+    <h2>Central bank buying <span class="hint">monthly layer · lagged 1–2 months · net t/mo</span></h2>
+    <canvas id="chart-cb" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Trade flows <span class="hint">monthly layer · Swiss exports &amp; China imports (t)</span></h2>
+    <canvas id="chart-trade" class="chart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Institutions (13F) <span class="hint">quarterly layer · gold alloc % &amp; fund count</span></h2>
+    <canvas id="chart-13f" class="chart"></canvas>
+  </div>
+</section>
+
+<!-- ═══════════════ LAYER MAP ═══════════════════════════════════════════ -->
+<section id="layers-section" class="card">
+  <h2>Layer map <span class="hint">one scheduled ingestor per source · ordered by update speed</span></h2>
+  <div id="layer-grid"></div>
+</section>
+
+<!-- ═══════════════ ALERTS ══════════════════════════════════════════════ -->
+<section id="alerts-section" class="card">
+  <h2>Anomaly &amp; whale alerts <span class="hint">triggers → dashboard + Telegram</span></h2>
+  <div id="alert-feed" class="feed"></div>
+</section>
+
+<!-- ═══════════════ JOURNAL ═════════════════════════════════════════════ -->
+<section id="journal-section" class="grid-2">
+  <div class="card">
+    <h2>Journal — weekly report <span class="hint">win-rate by setup type</span></h2>
+    <div id="journal-summary" class="stat-row"></div>
+    <h3>By setup type</h3>
+    <div id="journal-types" class="table-scroll"></div>
+    <h3>By week</h3>
+    <div id="journal-weeks" class="table-scroll"></div>
+  </div>
+  <div class="card">
+    <h2>Log a setup</h2>
+    <form id="journal-form" autocomplete="off">
+      <div class="form-grid">
+        <label>Date <input type="date" name="trade_date" required></label>
+        <label>Setup
+          <select name="setup_type" id="setup-type-select"></select>
+        </label>
+        <label>Direction
+          <select name="direction"><option>LONG</option><option>SHORT</option></select>
+        </label>
+        <label>Level <input type="number" step="0.1" name="level" placeholder="4085.5"></label>
+        <label>Result
+          <select name="result"><option>Win</option><option>Loss</option><option>BE</option></select>
+        </label>
+        <label>R multiple <input type="number" step="0.1" name="r_multiple" placeholder="1.8"></label>
+      </div>
+      <label class="full">Trigger <input type="text" name="trigger" placeholder="SGE premium spike + whale transfer to vault…"></label>
+      <label class="full">Notes <input type="text" name="notes" placeholder="Followed the layer stack, no anticipation."></label>
+      <label class="full">Screenshot file <input type="text" name="screenshot" placeholder="chart-20261020-01.png"></label>
+      <button type="submit" id="journal-submit">Save setup</button>
+      <p id="journal-msg" class="hint"></p>
+    </form>
+    <h3>Recent entries</h3>
+    <div id="journal-entries" class="table-scroll"></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p><b>Gold Trace</b> — ingestors → SQLite → structural/macro scores · event engine · anomaly alerts · journal → dashboard + Telegram.
+     <span id="foot-mode"></span> · <a href="/docs">API docs</a> · <a href="/api/status">status</a></p>
+</footer>
+
+<script src="/static/trace.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
